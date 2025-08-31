@@ -1,0 +1,18 @@
+# Python i środowisko wirtualne
+__pycache__/
+*.pyc
+venv/
+env/
+.venv/
+
+# Flask i baza danych SQLite
+instance/
+*.sqlite3
+
+# Pliki środowiskowe
+.env
+
+# Pliki systemowe i IDE
+.DS_Store
+.vscode/
+.idea/
