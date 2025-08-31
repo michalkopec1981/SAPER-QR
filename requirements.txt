@@ -3,6 +3,5 @@ Flask-SQLAlchemy==2.5.1
 Flask-SocketIO==5.3.3
 gunicorn==20.1.0
 psycopg2-binary==2.9.5
-eventlet==0.33.3
-greenlet>=0.4.17
-dnspython==1.16.0
+gevent==21.12.0
+gevent-websocket==0.10.1
