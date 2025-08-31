@@ -363,14 +363,12 @@ def handle_connect():
     emit_leaderboard_update()
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        if not GameState.query.filter_by(key='game_active').first(): db.session.add(GameState(key='game_active', value='False'))
-        if not GameState.query.filter_by(key='password').first(): db.session.add(GameState(key='password', value='SAPEREVENT'))
-        if not GameState.query.filter_by(key='tetris_active').first(): db.session.add(GameState(key='tetris_active', value='False'))
-        db.session.commit()
-    socketio.start_background_task(target=update_timer)
-    # Poniższa linia służy tylko do uruchamiania lokalnego i jest ignorowana na Railway
-    socketio.run(app, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    socketio.run(app, 
+                host='0.0.0.0', 
+                port=port, 
+                debug=False,
+                allow_unsafe_werkzeug=True)  # Dla Railway
+
 
 
