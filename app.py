@@ -6,13 +6,35 @@ import threading
 import os
 import random
 
+# --- ZAKTUALIZOWANA SEKCJA INICJALIZACJI APLIKACJI ---
+
 # Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bardzo-tajny-klucz-super-bezpieczny'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
+
+# Klucz sekretny pobierany ze zmiennej środowiskowej dla bezpieczeństwa
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'domyslny-niebezpieczny-klucz-do-testow')
+
+# Dynamiczna konfiguracja bazy danych
+database_url = os.environ.get('DATABASE_URL')
+# Poprawka dla nowszych wersji SQLAlchemy: zamiana postgres:// na postgresql://
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+# Użyj bazy danych z Railway (jeśli jest dostępna), w przeciwnym razie użyj lokalnej bazy SQLite
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url or 'sqlite:///instance/db.sqlite3'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
-socketio = SocketIO(app)
+
+# Konfiguracja SocketIO dla środowiska produkcyjnego
+socketio = SocketIO(app,
+                    cors_allowed_origins="*",  # Pozwala na połączenia z dowolnego adresu
+                    async_mode='eventlet',     # Wymagane do współpracy z Gunicorn
+                    logger=True,               # Włącza logowanie dla łatwiejszego debugowania
+                    engineio_logger=True)
+
+# --- KONIEC ZAKTUALIZOWANEJ SEKCJI ---
+
 
 # --- Models ---
 class Player(db.Model):
@@ -121,8 +143,6 @@ def scan_qr():
         db.session.add(PlayerScan(player_id=player_id, qrcode_id=qr_code.id, scan_time=datetime.utcnow()))
         db.session.commit()
 
-        # --- ZMIENIONA LOGIKA ---
-        # Sprawdź, czy Tetris jest aktywny
         tetris_state = GameState.query.filter_by(key='tetris_active').first()
         is_tetris_active = tetris_state and tetris_state.value == 'True'
 
@@ -176,12 +196,10 @@ def minigame_reward():
     
     return jsonify({'correct': True, 'letter': letter_to_reveal, 'points': reward_points})
 
-# --- NOWY ENDPOINT DO ZARZĄDZANIA TETRISEM ---
 @app.route('/api/competition/tetris', methods=['GET', 'POST'])
 def manage_tetris():
     tetris_state = GameState.query.filter_by(key='tetris_active').first()
     if not tetris_state:
-        # Fallback in case it's not initialized
         tetris_state = GameState(key='tetris_active', value='False')
         db.session.add(tetris_state)
         db.session.commit()
@@ -349,11 +367,9 @@ def handle_connect():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        # --- DODANA INICJALIZACJA STANU TETRISA ---
         if not GameState.query.filter_by(key='game_active').first(): db.session.add(GameState(key='game_active', value='False'))
         if not GameState.query.filter_by(key='password').first(): db.session.add(GameState(key='password', value='SAPEREVENT'))
         if not GameState.query.filter_by(key='tetris_active').first(): db.session.add(GameState(key='tetris_active', value='False'))
         db.session.commit()
     socketio.start_background_task(target=update_timer)
     socketio.run(app, debug=True)
-
