@@ -26,10 +26,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# Konfiguracja SocketIO dla środowiska produkcyjnego z silnikiem GEVENT
+# Konfiguracja SocketIO dla środowiska produkcyjnego z silnikiem EVENTLET
 socketio = SocketIO(app,
                     cors_allowed_origins="*",
-                    async_mode='gevent',     # <-- KRYTYCZNA ZMIANA
+                    async_mode='eventlet',  # <-- KRYTYCZNA ZMIANA
                     logger=True,
                     engineio_logger=True)
 
@@ -134,12 +134,12 @@ def scan_qr():
         db.session.commit()
         emit_leaderboard_update()
         return jsonify({'status': 'info', 'message': 'Zdobyłeś 50 punktów za czerwony kod!'})
-    else: 
+    else:
         last_scan = PlayerScan.query.filter_by(player_id=player_id, qrcode_id=qr_code.id).order_by(PlayerScan.scan_time.desc()).first()
         if last_scan and datetime.utcnow() < last_scan.scan_time + timedelta(minutes=5):
             wait_time = (last_scan.scan_time + timedelta(minutes=5) - datetime.utcnow()).seconds
             return jsonify({'status': 'wait', 'message': f'Odczekaj jeszcze {wait_time // 60} min {wait_time % 60} s.'}), 429
-        
+
         db.session.add(PlayerScan(player_id=player_id, qrcode_id=qr_code.id, scan_time=datetime.utcnow()))
         db.session.commit()
 
@@ -188,12 +188,12 @@ def minigame_reward():
     player.score += reward_points
     if letter_to_reveal not in player.revealed_letters:
         player.revealed_letters += letter_to_reveal
-    
+
     db.session.commit()
-    
+
     emit_leaderboard_update()
     emit_password_update()
-    
+
     return jsonify({'correct': True, 'letter': letter_to_reveal, 'points': reward_points})
 
 @app.route('/api/competition/tetris', methods=['GET', 'POST'])
@@ -211,7 +211,7 @@ def manage_tetris():
         db.session.commit()
         socketio.emit('competition_state_update', {'game': 'tetris', 'active': new_state})
         return jsonify({'status': 'success', 'tetris_active': tetris_state.value == 'True'})
-    
+
     return jsonify({'tetris_active': tetris_state.value == 'True'})
 
 @app.route('/api/start_game', methods=['POST'])
@@ -220,7 +220,7 @@ def start_game():
     white_codes_count = int(data.get('white_codes_count', 5))
     red_codes_count = int(data.get('red_codes_count', 5))
     minutes = int(data.get('minutes', 10))
-    
+
     db.session.query(PlayerScan).delete()
     db.session.query(PlayerAnswer).delete()
     db.session.query(Player).delete()
@@ -228,22 +228,22 @@ def start_game():
 
     for i in range(1, red_codes_count + 1): db.session.add(QRCode(code_identifier=f"czerwony{i}", is_red=True))
     for i in range(1, white_codes_count + 1): db.session.add(QRCode(code_identifier=f"bialy{i}", is_red=False))
-        
+
     game_state = GameState.query.filter_by(key='game_active').first()
     if game_state: game_state.value = 'True'
     else: db.session.add(GameState(key='game_active', value='True'))
-    
+
     game_timer['time_left'] = minutes * 60
     game_timer['is_running'] = True
     game_timer['end_time'] = datetime.now() + timedelta(seconds=game_timer['time_left'])
-    
+
     db.session.commit()
-    
+
     emit_leaderboard_update()
     emit_password_update()
     socketio.emit('game_state_update', get_full_game_state())
     socketio.emit('timer_started', {'time_left': game_timer['time_left']})
-    
+
     return jsonify({'status': 'success', 'message': f'Gra rozpoczęta na {minutes} minut.'})
 
 @app.route('/api/stop_game', methods=['POST'])
@@ -251,13 +251,13 @@ def stop_game():
     game_state = GameState.query.filter_by(key='game_active').first()
     if game_state: game_state.value = 'False'
     else: db.session.add(GameState(key='game_active', value='False'))
-    
+
     game_timer['time_left'] = 0
     game_timer['is_running'] = False
     game_timer['end_time'] = None
-    
+
     db.session.commit()
-    
+
     socketio.emit('game_state_update', get_full_game_state())
     socketio.emit('timer_reset')
     return jsonify({'status': 'success', 'message': 'Gra została zakończona.'})
@@ -365,7 +365,13 @@ def handle_connect():
     emit_leaderboard_update()
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False)
-
+    with app.app_context():
+        db.create_all()
+        if not GameState.query.filter_by(key='game_active').first(): db.session.add(GameState(key='game_active', value='False'))
+        if not GameState.query.filter_by(key='password').first(): db.session.add(GameState(key='password', value='SAPEREVENT'))
+        if not GameState.query.filter_by(key='tetris_active').first(): db.session.add(GameState(key='tetris_active', value='False'))
+        db.session.commit()
+    socketio.start_background_task(target=update_timer)
+    # Poniższa linia służy tylko do uruchamiania lokalnego i jest ignorowana na Railway
+    socketio.run(app, debug=True)
 
