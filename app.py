@@ -26,14 +26,12 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# Konfiguracja SocketIO dla środowiska produkcyjnego z silnikiem EVENTLET
-socketio = SocketIO(app,
-                    cors_allowed_origins="*",
-                    async_mode='eventlet',  # <-- KRYTYCZNA ZMIANA
-                    logger=True,
-                    engineio_logger=True)
-
-# --- KONIEC ZAKTUALIZOWANEJ SEKCJI ---
+# Zamiast eventlet/gevent, użyj threading
+socketio = SocketIO(app, 
+                   cors_allowed_origins="*", 
+                   async_mode='threading',  # Zmiana tutaj
+                   logger=True, 
+                   engineio_logger=True)
 
 
 # --- Models ---
@@ -374,4 +372,5 @@ if __name__ == '__main__':
     socketio.start_background_task(target=update_timer)
     # Poniższa linia służy tylko do uruchamiania lokalnego i jest ignorowana na Railway
     socketio.run(app, debug=True)
+
 
