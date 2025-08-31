@@ -26,11 +26,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# Konfiguracja SocketIO dla środowiska produkcyjnego
+# Konfiguracja SocketIO dla środowiska produkcyjnego z silnikiem GEVENT
 socketio = SocketIO(app,
-                    cors_allowed_origins="*",  # Pozwala na połączenia z dowolnego adresu
-                    async_mode='eventlet',     # Wymagane do współpracy z Gunicorn
-                    logger=True,               # Włącza logowanie dla łatwiejszego debugowania
+                    cors_allowed_origins="*",
+                    async_mode='gevent',     # <-- KRYTYCZNA ZMIANA
+                    logger=True,
                     engineio_logger=True)
 
 # --- KONIEC ZAKTUALIZOWANEJ SEKCJI ---
@@ -373,3 +373,4 @@ if __name__ == '__main__':
         db.session.commit()
     socketio.start_background_task(target=update_timer)
     socketio.run(app, debug=True)
+
